@@ -16,6 +16,8 @@ npm test
 npm run build
 ```
 
+构建产物在 `dist/`。资源使用相对路径（`base: './'`），可同时用于 GitHub Pages 子目录与 Cloudflare Pages 根路径。
+
 ## 使用
 
 1. （可选）填写占卜事宜，或点选用事类别  
@@ -28,11 +30,31 @@ npm run build
 
 本站为《周易》文化体验，不作决策依据。
 
-## GitHub Pages
+## 部署
 
-推送到 `main` 后，Actions 会构建并以 `base=/SixLines/` 部署。
+### Cloudflare Pages（推荐根路径）
 
-请先在仓库 **Settings → Pages → Source** 选择 **GitHub Actions**，否则 deploy 会 404。
+| 项 | 值 |
+|----|-----|
+| Framework preset | Vite |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | `/`（仓库根） |
+
+部署后打开 `*.pages.dev` 应能看到龟壳摇卦台。若仍空白：打开开发者工具 Network，确认 `assets/*.js` 为 **200**（不要再指向 `/SixLines/assets/...`）。
+
+也可用 Wrangler 直接上传本地产物：
+
+```bash
+npm run build
+npx wrangler pages deploy dist --project-name=sixlines
+```
+
+### GitHub Pages
+
+推送到 `main` 后，Actions 构建并部署 `dist`。
+
+请先在 **Settings → Pages → Source** 选择 **GitHub Actions**。
 
 线上地址：`https://<user>.github.io/SixLines/`  
 （本仓库示例：https://michuan.github.io/SixLines/）
