@@ -1,9 +1,8 @@
 import { defineConfig } from 'vitest/config';
 
-const pages = process.env.GITHUB_PAGES === 'true';
-
+// 相对路径：GitHub Pages 子目录与 Cloudflare Pages 根路径均可加载资源
 export default defineConfig({
-  base: pages ? '/SixLines/' : '/',
+  base: './',
   test: {
     globals: true,
     environment: 'node',
