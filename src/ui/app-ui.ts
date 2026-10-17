@@ -3,12 +3,13 @@ import { getDayPillars } from '../calendar/ganzhi';
 import { getHexagram, searchHexagrams, type Hexagram } from '../data/hexagrams';
 import { lineSymbol, type CastingResult } from '../divination';
 import { judgeMatter, type MatterCategory, type JudgmentResult } from '../judgment/verdict';
+import { CastStage } from './cast-stage';
+import type { LineResult } from '../divination';
 
 const CATEGORIES: MatterCategory[] = ['功名', '求财', '出行', '婚恋', '健康', '诉讼', '其他'];
 
 export interface UiHandlers {
-  onStart: () => void;
-  onShake: () => void;
+  onShakeShell: () => void;
   onReset: () => void;
   onMute: () => void;
   onMatterChange: (matter: string, category?: MatterCategory) => void;
@@ -17,11 +18,7 @@ export interface UiHandlers {
 
 export class AppUI {
   root: HTMLElement;
-  private statusEl!: HTMLElement;
-  private yaoRail!: HTMLElement;
-  private askCard!: HTMLElement;
-  private shakeBtn!: HTMLButtonElement;
-  private startBtn!: HTMLButtonElement;
+  stage!: CastStage;
   private resultsEl!: HTMLElement;
   private atlasEl!: HTMLElement;
   private matterInput!: HTMLInputElement;
@@ -41,49 +38,33 @@ export class AppUI {
     const top = el('div', { class: 'top-bar' }, [
       el('div', {}, [
         el('h1', { class: 'brand', text: '六爻' }),
-        el('p', { class: 'brand-sub', text: '龟甲 · 开元通宝 · 三钱起卦' }),
+        el('p', { class: 'brand-sub', text: '龟壳摇卦 · 开元通宝' }),
       ]),
       el('div', {}, [
         el('div', { class: 'pillars' }, [
-          `岁次 ${pillars.year}`,
-          el('br'),
-          `月建 ${pillars.month}　日辰 ${pillars.day}`,
+          `岁次 ${pillars.year}　月建 ${pillars.month}　日辰 ${pillars.day}`,
         ]),
         el('div', { class: 'toolbar' }, [
           (this.muteBtn = el('button', { class: 'btn', type: 'button', text: '音效' }) as HTMLButtonElement),
           el('button', { class: 'btn', type: 'button', text: '六十四卦', id: 'btn-atlas' }),
+          el('button', { class: 'btn', type: 'button', text: '再占', id: 'btn-reset' }),
         ]),
       ]),
     ]);
 
-    this.askCard = el('div', { class: 'ask-card' }, [
-      el('h2', { text: '问事' }),
-      el('p', { class: 'hint', text: '书所疑之事，择类或任关键词自识，而后启卦。' }),
+    const ask = el('div', { class: 'ask-bar' }, [
       (this.matterInput = el('input', {
         type: 'text',
-        placeholder: '例：此行求财可否',
+        placeholder: '默念或书所问之事，例：此行求财可否',
         maxlength: '40',
+        class: 'matter-input',
       }) as HTMLInputElement),
       el('div', { class: 'categories', id: 'cats' }),
-      el('div', { class: 'ask-actions' }, [
-        (this.startBtn = el('button', {
-          class: 'btn btn-primary',
-          type: 'button',
-          text: '装币入甲',
-        }) as HTMLButtonElement),
-        (this.shakeBtn = el('button', {
-          class: 'btn',
-          type: 'button',
-          text: '摇爻',
-          disabled: 'true',
-        }) as HTMLButtonElement),
-        el('button', { class: 'btn', type: 'button', text: '再占', id: 'btn-reset' }),
-      ]),
     ]);
 
-    const cats = this.askCard.querySelector('#cats')!;
+    const cats = ask.querySelector('#cats')!;
     for (const c of CATEGORIES) {
-      const chip = el('button', { class: 'chip', type: 'button', text: c, 'data-cat': c });
+      const chip = el('button', { class: 'chip', type: 'button', text: c });
       chip.addEventListener('click', () => {
         this.category = c;
         cats.querySelectorAll('.chip').forEach((n) => n.classList.remove('active'));
@@ -93,16 +74,19 @@ export class AppUI {
       cats.append(chip);
     }
 
-    this.statusEl = el('div', { class: 'status-line', text: '静候启卦' });
-    this.yaoRail = el('div', { class: 'yao-rail' });
-    for (let i = 0; i < 6; i++) {
-      this.yaoRail.append(el('div', { class: 'yao', 'data-i': String(i), text: '······' }));
-    }
+    this.stage = new CastStage(() => this.handlers.onShakeShell());
 
-    const center = el('div', { class: 'center-panel' }, [
-      this.statusEl,
-      this.yaoRail,
-      this.askCard,
+    const guide = el('div', { class: 'liucheng' }, [
+      el('div', { class: 'buzhou', text: '六爻占卜流程：' }),
+      el('p', {
+        text: '1、占卜之前默念所测之事，点击龟壳开始摇卦；',
+      }),
+      el('p', {
+        text: '2、铜钱为开元通宝：汉字一面为阳，光背一面为阴；',
+      }),
+      el('p', {
+        text: '3、每点击一次求得一爻，共六次成卦；成卦区自下而上为初爻至上爻。',
+      }),
     ]);
 
     const footer = el('div', { class: 'footer' }, [
@@ -111,16 +95,14 @@ export class AppUI {
       }),
     ]);
 
-    const overlay = el('div', { class: 'overlay' }, [top, center, footer]);
-    this.root.append(overlay);
+    const page = el('div', { class: 'page' }, [top, ask, this.stage.root, guide, footer]);
+    this.root.append(page);
 
     this.resultsEl = el('div', { class: 'results' });
     this.atlasEl = el('div', { class: 'atlas' });
     this.root.append(this.resultsEl, this.atlasEl);
 
     this.matterInput.addEventListener('input', () => this.emitMatter());
-    this.startBtn.addEventListener('click', () => this.handlers.onStart());
-    this.shakeBtn.addEventListener('click', () => this.handlers.onShake());
     this.muteBtn.addEventListener('click', () => this.handlers.onMute());
     this.root.querySelector('#btn-reset')!.addEventListener('click', () => this.handlers.onReset());
     this.root.querySelector('#btn-atlas')!.addEventListener('click', () => this.handlers.onOpenAtlas());
@@ -130,33 +112,13 @@ export class AppUI {
     this.handlers.onMatterChange(this.matterInput.value.trim(), this.category);
   }
 
-  setStatus(text: string): void {
-    this.statusEl.textContent = text;
-  }
-
   setMuted(muted: boolean): void {
     this.muteBtn.textContent = muted ? '音效 · 静' : '音效';
   }
 
-  setControls(opts: { canStart: boolean; canShake: boolean; askVisible: boolean }): void {
-    this.startBtn.disabled = !opts.canStart;
-    this.shakeBtn.disabled = !opts.canShake;
-    this.askCard.style.opacity = opts.askVisible ? '1' : '0.55';
-  }
-
-  renderLines(castingLines: { symbol: string; changing: boolean }[], litCount: number): void {
-    const nodes = [...this.yaoRail.querySelectorAll('.yao')];
-    nodes.forEach((n, i) => {
-      const line = castingLines[i];
-      if (line && i < litCount) {
-        n.textContent = line.symbol;
-        n.classList.add('lit');
-        n.classList.toggle('changing', line.changing);
-      } else {
-        n.textContent = '······';
-        n.classList.remove('lit', 'changing');
-      }
-    });
+  updateCast(lines: LineResult[], nextIndex: number, done: boolean): void {
+    this.stage.updateLines(lines);
+    this.stage.setTip(Math.min(nextIndex + 1, 6), done);
   }
 
   showResults(casting: CastingResult, matter: string, category?: MatterCategory): void {
@@ -176,17 +138,10 @@ export class AppUI {
       el('h2', { text: `本卦 · ${primary.name}` }),
       el('p', { text: `第 ${primary.id} 卦　${primary.lower}下${primary.upper}上` }),
     );
-
-    if (matter) {
-      inner.append(el('p', { text: `所问：${matter}`, style: 'opacity:0.8' }));
-    }
+    if (matter) inner.append(el('p', { text: `所问：${matter}`, style: 'opacity:0.8' }));
 
     if ('needCategory' in judged) {
-      inner.append(
-        el('p', {
-          text: `今日${judged.pillars.day}。请点选用事类别，以便干支断语。`,
-        }),
-      );
+      inner.append(el('p', { text: `今日${judged.pillars.day}。请点选用事类别，以便干支断语。` }));
     } else {
       const j = judged as JudgmentResult;
       inner.append(
@@ -197,10 +152,12 @@ export class AppUI {
 
     inner.append(this.oracleBlock('卦辞', primary.judgment));
     if (casting.changingIndexes.length) {
-      const yaoTexts = casting.changingIndexes
-        .map((i) => `第${i + 1}爻（动）：${primary.lines[i]}`)
-        .join('\n');
-      inner.append(this.oracleBlock('动爻', yaoTexts));
+      inner.append(
+        this.oracleBlock(
+          '动爻',
+          casting.changingIndexes.map((i) => `第${i + 1}爻（动）：${primary.lines[i]}`).join('\n'),
+        ),
+      );
     }
     inner.append(this.oracleBlock('象曰', primary.interpretation));
     if (changed) {
@@ -210,12 +167,9 @@ export class AppUI {
         this.oracleBlock('变象', changed.interpretation),
       );
     }
-
     const linesBox = el('div', { class: 'oracle-block' }, [el('h3', { text: '六爻' })]);
     casting.lines.forEach((l, i) => {
-      linesBox.append(
-        el('div', { text: `${i + 1} ${lineSymbol(l)}　${primary.lines[i] ?? ''}` }),
-      );
+      linesBox.append(el('div', { text: `${i + 1} ${lineSymbol(l)}　${primary.lines[i] ?? ''}` }));
     });
     inner.append(linesBox);
     inner.append(
@@ -231,10 +185,7 @@ export class AppUI {
   }
 
   private oracleBlock(title: string, body: string): HTMLElement {
-    return el('div', { class: 'oracle-block' }, [
-      el('h3', { text: title }),
-      el('div', { text: body }),
-    ]);
+    return el('div', { class: 'oracle-block' }, [el('h3', { text: title }), el('div', { text: body })]);
   }
 
   openAtlas(onPick?: (h: Hexagram) => void): void {
@@ -245,7 +196,6 @@ export class AppUI {
       class: 'atlas-search',
     }) as HTMLInputElement;
     const grid = el('div', { class: 'atlas-grid' });
-
     const render = (q = '') => {
       grid.innerHTML = '';
       for (const h of searchHexagrams(q)) {
@@ -259,17 +209,9 @@ export class AppUI {
     };
     render();
     search.addEventListener('input', () => render(search.value));
-
     const closeBtn = el('button', { class: 'btn', type: 'button', text: '闭合' });
     closeBtn.addEventListener('click', () => this.atlasEl.classList.remove('open'));
-    inner.append(
-      closeBtn,
-      el('h2', { text: '六十四卦' }),
-      el('p', { text: '卷轴检索 · 点开可读卦辞', style: 'opacity:0.7' }),
-      search,
-      grid,
-    );
-
+    inner.append(closeBtn, el('h2', { text: '六十四卦' }), search, grid);
     this.atlasEl.innerHTML = '';
     this.atlasEl.append(inner);
     this.atlasEl.classList.add('open');
