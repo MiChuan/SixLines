@@ -1,0 +1,4 @@
+interface:
+  display_name: SixLines 六爻
+  short_description: 龟甲三钱起卦与干支用事维护指南
+  default_prompt: 按 SixLines 仓库的三钱六爻与仪式剧场约定协助我
